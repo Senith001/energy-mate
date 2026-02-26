@@ -48,7 +48,7 @@ export const registerUser = async (req, res, next) => {
       role: "user",
     });
 
-    // Generate OTP (6 digits)
+    // 🔹 Generate OTP (6 digits)
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpHash = await bcrypt.hash(otp, 10);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
@@ -85,6 +85,93 @@ export const registerUser = async (req, res, next) => {
     return res.status(201).json({
       message: "User registered successfully. OTP sent to email.",
       userId: user.userId,
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= ADMIN REGISTER =================
+export const registerAdmin = async (req, res, next) => {
+  try {
+    const incoming = req.headers["x-admin-secret"];
+
+    if (!incoming || incoming !== process.env.ADMIN_SECRET) {
+        return res.status(403).json({ message: "Unauthorized admin registration" });
+    }
+
+
+    const { name, email, password } = req.body || {};
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: "name, email, password are required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const admin = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "admin",
+      isVerified: true
+    });
+
+    return res.status(201).json({
+      message: "Admin registered successfully",
+      userId: admin.userId,
+    });
+
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+
+// ================= CREATE ADMIN (Admin-only) =================
+export const createAdmin = async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body || {};
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "name, email, password are required" });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const admin = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "admin",
+      isVerified: true, // admins are trusted accounts created by admins
+    });
+
+    return res.status(201).json({
+      message: "Admin created successfully",
+      user: {
+        id: admin._id,
+        userId: admin.userId,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+      },
     });
   } catch (err) {
     return handleError(err, res, next);
@@ -190,6 +277,70 @@ export const loginUser = async (req, res, next) => {
         role: user.role,
       },
     });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= ADMIN - VIEW ALL USERS =================
+export const getAllUsers = async (req, res, next) => {
+  try {
+    const users = await User.find().select("-password");
+
+    return res.status(200).json({
+      count: users.length,
+      users,
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= ADMIN - DELETE USER =================
+export const deleteUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Prevent admin from deleting another admin (optional safety)
+    if (user.role === "admin") {
+      return res.status(403).json({ message: "Cannot delete another admin" });
+    }
+
+    await user.deleteOne();
+
+    return res.status(200).json({ message: "User deleted successfully" });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+
+// ================= ADMIN - CHANGE USER PASSWORD =================
+export const changeUserPassword = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: "New password required" });
+    }
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    user.password = hashedPassword; // ✅ update existing password field
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Password updated successfully",
+    });
+
   } catch (err) {
     return handleError(err, res, next);
   }
