@@ -1,6 +1,6 @@
 import rf from "../utils/responseFormatter.js";
 
-import Household from "../models/household.js";
+import Household from "../models/Household.js";
 import Bill from "../models/bill.js";
 import Appliance from "../models/Appliance.js";
 

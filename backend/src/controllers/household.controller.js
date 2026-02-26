@@ -1,5 +1,4 @@
-
-      import Household from "../models/Household.js";
+import Household from "../models/Household.js";
 import { getWeatherByCity, generateEnergyTip } from "../services/weather.service.js";
 
 export const createHousehold = async (req, res) => {
