@@ -14,13 +14,13 @@ import { protect, authorize } from "../middlewares/auth.middleware.js"; // auth 
 
 const router = express.Router();
 
-router.post("/",             protect, authorize("admin"), createBillRules, createBill);           // user enters units or readings
-router.post("/generate",     protect, authorize("admin"), createBillRules, generateBillFromUsage); // auto from usage records
-router.get("/",              protect, authorize("admin"), getBills);
-router.get("/compare",       protect, authorize("admin"), comparisonQueryRules, getComparison);
-router.get("/:id",           protect, authorize("admin"), billIdRule, getBillById);
-router.put("/:id",           protect, authorize("admin"), updateBillRules, updateBill);
-router.put("/:id/regenerate",protect, authorize("admin"), billIdRule, regenerateBill);
+router.post("/",             protect, createBillRules, createBill);           // user enters units or readings
+router.post("/generate",     protect, createBillRules, generateBillFromUsage); // auto from usage records
+router.get("/",              protect, getBills);
+router.get("/compare",       protect, comparisonQueryRules, getComparison);
+router.get("/:id",           protect, billIdRule, getBillById);
+router.put("/:id",           protect, updateBillRules, updateBill);
+router.put("/:id/regenerate",protect, billIdRule, regenerateBill);
 router.delete("/:id",        protect, authorize("admin"), billIdRule, deleteBill);
 
 export default router;
