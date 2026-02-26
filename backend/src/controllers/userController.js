@@ -21,7 +21,7 @@ const handleError = (err, res, next) => {
   });
 };
 
-// ================= REGISTER =================
+// ================= REGISTER USER =================
 export const registerUser = async (req, res, next) => {
   try {
     const { name, email, password } = req.body || {};
@@ -91,92 +91,7 @@ export const registerUser = async (req, res, next) => {
   }
 };
 
-// ================= ADMIN REGISTER =================
-export const registerAdmin = async (req, res, next) => {
-  try {
-    const incoming = req.headers["x-admin-secret"];
 
-    if (!incoming || incoming !== process.env.ADMIN_SECRET) {
-        return res.status(403).json({ message: "Unauthorized admin registration" });
-    }
-
-
-    const { name, email, password } = req.body || {};
-
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        message: "name, email, password are required",
-      });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    const existing = await User.findOne({ email: normalizedEmail });
-    if (existing) {
-      return res.status(409).json({ message: "Email already registered" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const admin = await User.create({
-      name: name.trim(),
-      email: normalizedEmail,
-      password: hashedPassword,
-      role: "admin",
-      isVerified: true
-    });
-
-    return res.status(201).json({
-      message: "Admin registered successfully",
-      userId: admin.userId,
-    });
-
-  } catch (err) {
-    return handleError(err, res, next);
-  }
-};
-
-
-// ================= CREATE ADMIN (Admin-only) =================
-export const createAdmin = async (req, res, next) => {
-  try {
-    const { name, email, password } = req.body || {};
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "name, email, password are required" });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    const existing = await User.findOne({ email: normalizedEmail });
-    if (existing) {
-      return res.status(409).json({ message: "Email already registered" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const admin = await User.create({
-      name: name.trim(),
-      email: normalizedEmail,
-      password: hashedPassword,
-      role: "admin",
-      isVerified: true, // admins are trusted accounts created by admins
-    });
-
-    return res.status(201).json({
-      message: "Admin created successfully",
-      user: {
-        id: admin._id,
-        userId: admin.userId,
-        name: admin.name,
-        email: admin.email,
-        role: admin.role,
-      },
-    });
-  } catch (err) {
-    return handleError(err, res, next);
-  }
-};
 
 // ================= VERIFY OTP =================
 export const verifyOtp = async (req, res, next) => {
@@ -341,6 +256,153 @@ export const changeUserPassword = async (req, res, next) => {
       message: "Password updated successfully",
     });
 
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= ADMIN REGISTER =================
+export const registerAdmin = async (req, res, next) => {
+  try {
+    const incoming = req.headers["x-admin-secret"];
+
+    if (!incoming || incoming !== process.env.ADMIN_SECRET) {
+        return res.status(403).json({ message: "Unauthorized admin registration" });
+    }
+
+
+    const { name, email, password } = req.body || {};
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: "name, email, password are required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const admin = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "superadmin",
+      isVerified: true
+    });
+
+    return res.status(201).json({
+      message: "Admin registered successfully",
+      userId: admin.userId,
+    });
+
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= CREATE ADMIN (Super Admin-only) =================
+export const createAdmin = async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body || {};
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "name, email, password are required" });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const admin = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "admin",
+      isVerified: true, // admins are trusted accounts created by admins
+    });
+
+    return res.status(201).json({
+      message: "Admin created successfully",
+      user: {
+        id: admin._id,
+        userId: admin.userId,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+      },
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= DELETE ADMIN (Super Admin-only) =================
+
+export const deleteAdmin = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const target = await User.findById(id);
+    if (!target) return res.status(404).json({ message: "Admin not found" });
+
+    if (target.role !== "admin") {
+      return res.status(403).json({ message: "You can only delete normal admins" });
+    }
+
+    await target.deleteOne();
+    return res.status(200).json({ message: "Admin deleted successfully" });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= UPDATE ADMIN (Super Admin-only) =================
+
+export const changeAdminPassword = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body || {};
+
+    if (!password) {
+      return res.status(400).json({ message: "new password is required" });
+    }
+
+    const target = await User.findById(id);
+    if (!target) return res.status(404).json({ message: "Admin not found" });
+
+    if (target.role !== "admin") {
+      return res.status(403).json({ message: "You can only change password of normal admins" });
+    }
+
+    target.password = await bcrypt.hash(password, 10);
+    await target.save();
+
+    return res.status(200).json({ message: "Admin password updated successfully" });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= VIEW ALL ADMINS (Super Admin-only) =================
+export const getAllAdmins = async (req, res, next) => {
+  try {
+    const admins = await User.find({ role: "admin" }).select("-password");
+
+    return res.status(200).json({
+      count: admins.length,
+      admins,
+    });
   } catch (err) {
     return handleError(err, res, next);
   }

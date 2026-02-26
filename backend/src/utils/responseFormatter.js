@@ -1,11 +1,35 @@
-function success(res, data = null, message = 'OK', status = 200) {
-  return res.status(status).json({ success: true, message, data });
-}
+// src/utils/responseFormatter.js
 
-function error(res, message = 'Error', status = 500, details = null) {
-  const payload = { success: false, message };
-  if (details) payload.error = details;
-  return res.status(status).json(payload);
-}
+export const success = (
+  res,
+  data,
+  message = "Success",
+  statusCode = 200,
+  meta = null
+) => {
+  const payload = {
+    success: true,
+    message,
+    data,
+  };
 
-export { success, error };
+  if (meta) payload.meta = meta;
+
+  return res.status(statusCode).json(payload);
+};
+
+export const error = (
+  res,
+  message = "Internal Server Error",
+  statusCode = 500,
+  err = null
+) => {
+  return res.status(statusCode).json({
+    success: false,
+    message,
+    error: err ? (err.message || err.toString()) : null,
+  });
+};
+
+const rf = { success, error };
+export default rf;
