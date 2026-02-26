@@ -16,17 +16,20 @@ const userSchema = new mongoose.Schema(
 
 // ✅ Promise-style middleware (no next param)
 userSchema.pre("save", async function () {
-  // Only generate on first insert
   if (!this.isNew) return;
   if (this.userId) return;
 
+  const roleKey = this.role === "admin" ? "admin" : "user";
+
   const counter = await Counter.findOneAndUpdate(
-    { name: "user" },
+    { name: roleKey },
     { $inc: { seq: 1 } },
     { new: true, upsert: true }
   );
 
-  this.userId = `U${String(counter.seq).padStart(3, "0")}`;
+  const prefix = roleKey === "admin" ? "A" : "U";
+
+  this.userId = `${prefix}${String(counter.seq).padStart(3, "0")}`;
 });
 
 export default mongoose.model("User", userSchema);
