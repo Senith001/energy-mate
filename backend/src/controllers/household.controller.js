@@ -1,58 +1,93 @@
 import Household from "../models/Household.js";
+
+import { getReqUserId, isAdmin } from "../utils/authHelpers.js";
+
 import { getWeatherByCity, generateEnergyTip } from "../services/weather.service.js";
 
-export const createHousehold = async (req, res) => {
+export const createHousehold = async (req, res, next) => {
   try {
-    const household = new Household(req.body);
-    const saved = await household.save();
-    res.status(201).json(saved);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    const userId = getReqUserId(req);
+
+    const household = await Household.create({
+      ...req.body,
+      userId,
+    });
+
+    res.status(201).json(household);
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getAllHouseholds = async (req, res) => {
+export const getAllHouseholds = async (req, res, next) => {
   try {
-    const households = await Household.find();
+    const userId = getReqUserId(req);
+    const filter = isAdmin(req) ? {} : { userId };
+
+    const households = await Household.find(filter);
     res.status(200).json(households);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getHouseholdById = async (req, res) => {
+export const getHouseholdById = async (req, res, next) => {
   try {
-    const household = await Household.findById(req.params.id);
+    const userId = getReqUserId(req);
+
+    const filter = isAdmin(req)
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId };
+
+    const household = await Household.findOne(filter);
+
     if (!household) return res.status(404).json({ message: "Household not found" });
+
     res.status(200).json(household);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const updateHousehold = async (req, res) => {
+export const updateHousehold = async (req, res, next) => {
   try {
-    const updated = await Household.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const userId = getReqUserId(req);
+
+    const filter = isAdmin(req)
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId };
+
+    const updated = await Household.findOneAndUpdate(filter, req.body, { new: true });
+
     if (!updated) return res.status(404).json({ message: "Household not found" });
+
     res.status(200).json(updated);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const deleteHousehold = async (req, res) => {
+export const deleteHousehold = async (req, res, next) => {
   try {
-    const deleted = await Household.findByIdAndDelete(req.params.id);
+    const userId = getReqUserId(req);
+
+    const filter = isAdmin(req)
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId };
+
+    const deleted = await Household.findOneAndDelete(filter);
+
     if (!deleted) return res.status(404).json({ message: "Household not found" });
+
     res.status(200).json({ message: "Household deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const updateHouseholdSettings = async (req, res) => {
+export const updateHouseholdSettings = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const userId = getReqUserId(req);
     const { monthlyKwhTarget, monthlyCostTarget, currency } = req.body;
 
     const updateData = {};
@@ -60,28 +95,41 @@ export const updateHouseholdSettings = async (req, res) => {
     if (monthlyCostTarget !== undefined) updateData.monthlyCostTarget = monthlyCostTarget;
     if (currency !== undefined) updateData.currency = currency;
 
-    const updated = await Household.findByIdAndUpdate(id, updateData, { new: true });
+    const filter = isAdmin(req)
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId };
+
+    const updated = await Household.findOneAndUpdate(filter, updateData, { new: true });
+
     if (!updated) return res.status(404).json({ message: "Household not found" });
 
     res.status(200).json(updated);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getHouseholdWeather = async (req, res) => {
+export const getHouseholdWeather = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const userId = getReqUserId(req);
 
-    const household = await Household.findById(id);
+    const filter = isAdmin(req)
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId };
+
+    const household = await Household.findOne(filter);
     if (!household) return res.status(404).json({ message: "Household not found" });
 
-    const city = household.city;
-    const weather = await getWeatherByCity(city);
+    const weather = await getWeatherByCity(household.city);
     const tip = generateEnergyTip(weather.temperature);
 
-    res.status(200).json({ householdId: id, city, weather, tip });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(200).json({
+      householdId: household._id,
+      city: household.city,
+      weather,
+      tip,
+    });
+  } catch (err) {
+    next(err);
   }
 };

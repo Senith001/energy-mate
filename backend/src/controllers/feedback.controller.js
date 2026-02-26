@@ -1,61 +1,54 @@
 import Feedback from "../models/Feedback.js";
+import { getReqUserId, isAdmin } from "../utils/authHelpers.js";
 
-export const createFeedback = async (req, res) => {
+export const createFeedback = async (req, res, next) => {
   try {
-    const feedback = new Feedback(req.body);
-    const saved = await feedback.save();
+    const userId = getReqUserId(req);
+
+    const saved = await Feedback.create({
+      ...req.body,
+      userId,
+    });
+
     res.status(201).json(saved);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getAllFeedback = async (req, res) => {
+export const getMyFeedback = async (req, res, next) => {
+  try {
+    const userId = getReqUserId(req);
+    const list = await Feedback.find({ userId }).sort({ createdAt: -1 });
+    res.status(200).json(list);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getAllFeedback = async (req, res, next) => {
   try {
     const list = await Feedback.find().sort({ createdAt: -1 });
     res.status(200).json(list);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getFeedbackById = async (req, res) => {
+export const updateFeedbackStatus = async (req, res, next) => {
   try {
-    const item = await Feedback.findById(req.params.id);
-    if (!item) return res.status(404).json({ message: "Feedback not found" });
-    res.status(200).json(item);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+    if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
 
-export const updateFeedback = async (req, res) => {
-  try {
-    const updated = await Feedback.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updated = await Feedback.findByIdAndUpdate(
+      req.params.id,
+      { status: req.body.status },
+      { new: true }
+    );
+
     if (!updated) return res.status(404).json({ message: "Feedback not found" });
-    res.status(200).json(updated);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-};
 
-export const updateFeedbackStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-    const updated = await Feedback.findByIdAndUpdate(req.params.id, { status }, { new: true });
-    if (!updated) return res.status(404).json({ message: "Feedback not found" });
     res.status(200).json(updated);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-};
-
-export const deleteFeedback = async (req, res) => {
-  try {
-    const deleted = await Feedback.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Feedback not found" });
-    res.status(200).json({ message: "Feedback deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    next(err);
   }
 };
