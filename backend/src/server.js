@@ -1,18 +1,27 @@
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
+import mongoose from "mongoose";
 import cors from "cors";
 import morgan from "morgan";
 
-import { connectDB } from "./config/db.js";
+// Routes
 import userRoutes from "./routes/userRoutes.js";
 
-dotenv.config();
+import householdRoutes from "./routes/household.routes.js";
+import roomRoutes from "./routes/room.routes.js";
+import applianceRoutes from "./routes/appliance.routes.js";
+import feedbackRoutes from "./routes/feedback.routes.js";
+import supportTicketRoutes from "./routes/supportTicket.routes.js";
+
+// Middlewares
+import { notFound, errorHandler } from "./middlewares/error.middleware.js";
 
 const app = express();
 
-// Middleware
+// ================= MIDDLEWARE =================
 app.use(express.json());
 app.use(morgan("dev"));
+
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "*",
@@ -20,32 +29,42 @@ app.use(
   })
 );
 
-// Health
+// ================= HEALTH CHECK =================
 app.get("/health", (req, res) => {
-  res.json({ status: "✅ MongoDB Connected"});
+  res.json({ status: "✅ Server is running" });
 });
 
-// Routes
+// ================= ROUTES =================
+
+// User routes
 app.use("/api/users", userRoutes);
 
-// 404
-app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+// Household system routes
+app.use("/api/households", householdRoutes);
+app.use("/api", roomRoutes);
+app.use("/api", applianceRoutes);
+app.use("/api/feedback", feedbackRoutes);
+app.use("/api/support", supportTicketRoutes);
+
+// Test route
+app.get("/", (req, res) => {
+  res.send("It Is Working......");
 });
 
-// ✅ Error handler MUST have 4 params (err, req, res, next)
-app.use((err, req, res, next) => {
-  console.error("❌ Global Error:", err);
-  res.status(500).json({ message: err.message || "Server error" });
-});
+// ================= ERROR HANDLING =================
+app.use(notFound);
+app.use(errorHandler);
 
-const PORT = process.env.PORT || 5001;
+// ================= DATABASE + SERVER START =================
+const PORT = process.env.PORT || 5000;
 
-connectDB()
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => {
-    app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+    console.log("✅ MongoDB Connected Successfully");
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => {
-    console.error("❌ DB connection failed:", err.message);
+    console.error("❌ MongoDB Connection Failed:", err.message);
     process.exit(1);
   });
