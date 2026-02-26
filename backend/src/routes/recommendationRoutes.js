@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken, requireRole } from "../middlewares/auth.js";
+import { verifyToken, requireRole } from "../middlewares/auth.middleware.js";
 
 import {
   // AI
