@@ -1,5 +1,7 @@
 import Household from "../models/Household.js";
+
 import { getReqUserId, isAdmin } from "../utils/authHelpers.js";
+
 import { getWeatherByCity, generateEnergyTip } from "../services/weather.service.js";
 
 export const createHousehold = async (req, res, next) => {

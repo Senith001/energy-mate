@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
-    role: { type: String, default: "user", enum: ["user", "admin"] },
+    role: { type: String, default: "user", enum: ["user", "admin", "superadmin"] },
     isVerified: { type: Boolean, default: false },
     twoFactorEnabled: { type: Boolean, default: false },
   },
@@ -19,15 +19,25 @@ userSchema.pre("save", async function () {
   if (!this.isNew) return;
   if (this.userId) return;
 
-  const roleKey = this.role === "admin" ? "admin" : "user";
+  let roleKey;
+  let prefix;
+
+  if (this.role === "superadmin") {
+    roleKey = "superadmin";
+    prefix = "S";
+  } else if (this.role === "admin") {
+    roleKey = "admin";
+    prefix = "A";
+  } else {
+    roleKey = "user";
+    prefix = "U";
+  }
 
   const counter = await Counter.findOneAndUpdate(
     { name: roleKey },
     { $inc: { seq: 1 } },
     { new: true, upsert: true }
   );
-
-  const prefix = roleKey === "admin" ? "A" : "U";
 
   this.userId = `${prefix}${String(counter.seq).padStart(3, "0")}`;
 });
