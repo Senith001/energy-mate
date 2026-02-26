@@ -12,6 +12,7 @@ import roomRoutes from "./routes/room.routes.js";
 import applianceRoutes from "./routes/appliance.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import supportTicketRoutes from "./routes/supportTicket.routes.js";
+import recommendationRoutes from "./routes/recommendationRoutes.js";
 
 // Middlewares
 import { notFound, errorHandler } from "./middlewares/error.middleware.js";
@@ -45,6 +46,7 @@ app.use("/api", roomRoutes);
 app.use("/api", applianceRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/support", supportTicketRoutes);
+app.use("/api/recommendations", recommendationRoutes);
 
 // Test route
 app.get("/", (req, res) => {
