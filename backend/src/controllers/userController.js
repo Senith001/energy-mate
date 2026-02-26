@@ -1,6 +1,8 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Otp from "../models/Otp.js";
+import { sendEmail } from "../utils/email.js";
 
 const signToken = (user) => {
   return jwt.sign(
@@ -44,13 +46,98 @@ export const registerUser = async (req, res, next) => {
       email: normalizedEmail,
       password: hashedPassword,
       role: "user",
-      isVerified: true
     });
+
+    // Generate OTP (6 digits)
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+    // Optional cleanup: remove old unused VERIFY_EMAIL OTPs for this user
+    await Otp.deleteMany({
+      userId: user._id,
+      purpose: "VERIFY_EMAIL",
+      usedAt: null,
+    });
+
+    await Otp.create({
+      userId: user._id,
+      purpose: "VERIFY_EMAIL",
+      otpHash,
+      expiresAt,
+    });
+
+    console.log("OTP:", otp);
+    console.log("📧 Sending OTP email to:", user.email);
+
+    await sendEmail({
+      to: user.email,
+      subject: "ENERGYMATE OTP Verification",
+      html: `
+        <p>Hello ${user.name},</p>
+        <p>Your OTP is: <b>${otp}</b></p>
+        <p>This code expires in 10 minutes.</p>
+      `,
+    });
+
+    console.log("✅ OTP email sent (check Mailtrap inbox)");
+
+    return res.status(201).json({
+      message: "User registered successfully. OTP sent to email.",
+      userId: user.userId,
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= VERIFY OTP =================
+export const verifyOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body || {};
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        message: "email and otp are required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const otpDoc = await Otp.findOne({
+      userId: user._id,
+      purpose: "VERIFY_EMAIL",
+      usedAt: null,
+    }).sort({ createdAt: -1 });
+
+    if (!otpDoc) {
+      return res.status(400).json({ message: "OTP not found" });
+    }
+
+    if (otpDoc.expiresAt < new Date()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    const isMatch = await bcrypt.compare(String(otp), otpDoc.otpHash);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    otpDoc.usedAt = new Date();
+    await otpDoc.save();
+
+    user.isVerified = true;
+    await user.save();
 
     const token = signToken(user);
 
-    return res.status(201).json({
-      message: "User registered successfully.",
+    return res.status(200).json({
+      message: "Email verified successfully",
       token,
       user: {
         id: user._id,
@@ -81,6 +168,12 @@ export const loginUser = async (req, res, next) => {
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
+    if (!user.isVerified) {
+      return res.status(403).json({
+        message: "Please verify your email before logging in",
+      });
+    }
+
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
@@ -100,9 +193,4 @@ export const loginUser = async (req, res, next) => {
   } catch (err) {
     return handleError(err, res, next);
   }
-};
-
-// Step 02: OTP not configured yet
-export const verifyOtp = async (req, res) => {
-  return res.status(501).json({ message: "OTP not configured yet" });
 };
