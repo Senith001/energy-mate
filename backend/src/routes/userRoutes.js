@@ -1,5 +1,5 @@
 import express from "express";
-import {registerUser, loginUser, verifyOtp} from "../controllers/userController.js";
+import {registerUser, loginUser, verifyOtp, forgotPassword, resetPassword, changeMyPassword} from "../controllers/userController.js";
 import { registerAdmin } from "../controllers/userController.js";
 import { protect, authorize } from "../middlewares/auth.middleware.js";
 import { createAdmin } from "../controllers/userController.js";
@@ -28,5 +28,9 @@ router.delete("/superadmin/admins/:id", protect, authorize("superadmin"), delete
 router.put("/superadmin/admins/:id/password", protect, authorize("superadmin"), changeAdminPassword);
 
 router.get("/superadmin/admins", protect, authorize("superadmin"), getAllAdmins);
+
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+router.put("/me/change-password", protect, changeMyPassword);
 
 export default router;
