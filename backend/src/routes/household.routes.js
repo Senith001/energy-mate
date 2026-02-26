@@ -1,22 +1,27 @@
 import express from "express";
+import { protect } from "../middlewares/auth.middleware.js";
+import {
+  createHousehold,
+  getAllHouseholds,
+  getHouseholdById,
+  updateHousehold,
+  deleteHousehold,
+  updateHouseholdSettings,
+  getHouseholdWeather,
+} from "../controllers/household.controller.js";
+
 const router = express.Router();
 
-import * as householdController from "../controllers/household.controller.js";
-import validate from "../middlewares/validate.middleware.js";
-import {
-  createHouseholdValidator,
-  updateHouseholdValidator,
-  updateSettingsValidator
-} from "../validators/household.validator.js";
+router.use(protect);
 
-router.post("/", createHouseholdValidator, validate, householdController.createHousehold);
-router.get("/", householdController.getAllHouseholds);
+router.post("/", createHousehold);
+router.get("/", getAllHouseholds);
 
-router.patch("/:id/settings", updateSettingsValidator, validate, householdController.updateHouseholdSettings);
-router.get("/:id/weather", householdController.getHouseholdWeather);
+router.patch("/:id/settings", updateHouseholdSettings);
+router.get("/:id/weather", getHouseholdWeather);
 
-router.get("/:id", householdController.getHouseholdById);
-router.put("/:id", updateHouseholdValidator, validate, householdController.updateHousehold);
-router.delete("/:id", householdController.deleteHousehold);
+router.get("/:id", getHouseholdById);
+router.put("/:id", updateHousehold);
+router.delete("/:id", deleteHousehold);
 
 export default router;

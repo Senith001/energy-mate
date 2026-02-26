@@ -1,23 +1,21 @@
 import express from "express";
+import { protect, authorize } from "../middlewares/auth.middleware.js";
+import {
+  createTicket,
+  getMyTickets,
+  getAllTickets,
+  updateTicketStatus,
+  addMessage,
+} from "../controllers/supportTicket.controller.js";
+
 const router = express.Router();
 
-import * as supportController from "../controllers/supportTicket.controller.js";
-import validate from "../middlewares/validate.middleware.js";
-import {
-  createTicketValidator,
-  updateTicketValidator,
-  updateStatusValidator,
-  addMessageValidator
-} from "../validators/supportTicket.validator.js";
+router.post("/", protect, createTicket);
+router.get("/my", protect, getMyTickets);
 
-router.post("/", createTicketValidator, validate, supportController.createTicket);
-router.get("/", supportController.getAllTickets);
+router.get("/", protect, authorize("admin"), getAllTickets);
+router.patch("/:id/status", protect, authorize("admin"), updateTicketStatus);
 
-router.patch("/:id/status", updateStatusValidator, validate, supportController.updateTicketStatus);
-router.post("/:id/messages", addMessageValidator, validate, supportController.addMessage);
-
-router.get("/:id", supportController.getTicketById);
-router.put("/:id", updateTicketValidator, validate, supportController.updateTicket);
-router.delete("/:id", supportController.deleteTicket);
+router.post("/:id/messages", protect, addMessage);
 
 export default router;
