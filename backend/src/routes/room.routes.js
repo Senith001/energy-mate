@@ -2,7 +2,7 @@ import express from "express";
 const router = express.Router();
 
 import * as roomController from "../controllers/room.controller.js";
-import validate from "../middlewares/validate.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
 import { createRoomValidator, updateRoomValidator } from "../validators/room.validator.js";
 
 router.post("/households/:householdId/rooms", createRoomValidator, validate, roomController.createRoom);
