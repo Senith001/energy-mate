@@ -1,21 +1,27 @@
-import { body } from "express-validator";
+import { body, param } from "express-validator";
 
 export const createFeedbackValidator = [
-  body("name").notEmpty().withMessage("name is required"),
-  body("email").notEmpty().isEmail().withMessage("email must be valid"),
-  body("type").optional().isIn(["bug", "suggestion", "complaint", "other"]),
-  body("message").notEmpty().isLength({ min: 5 }).withMessage("message must be at least 5 chars"),
-  body("rating").optional({ nullable: true }).isInt({ min: 1, max: 5 })
+  body("name").trim().notEmpty().withMessage("name is required"),
+  body("email").trim().isEmail().withMessage("valid email is required"),
+  body("message").trim().notEmpty().withMessage("message is required"),
+  body("type")
+    .optional()
+    .isIn(["bug", "suggestion", "complaint", "other"])
+    .withMessage("type must be bug/suggestion/complaint/other"),
+  body("rating")
+    .optional()
+    .isInt({ min: 1, max: 5 })
+    .withMessage("rating must be 1-5"),
 ];
 
-export const updateFeedbackValidator = [
-  body("name").optional().notEmpty(),
-  body("email").optional().isEmail(),
-  body("type").optional().isIn(["bug", "suggestion", "complaint", "other"]),
-  body("message").optional().isLength({ min: 5 }),
-  body("rating").optional({ nullable: true }).isInt({ min: 1, max: 5 })
+export const feedbackIdParamValidator = [
+  param("id").isMongoId().withMessage("invalid feedback id"),
 ];
 
 export const updateFeedbackStatusValidator = [
-  body("status").notEmpty().isIn(["new", "in_progress", "resolved"])
+  param("id").isMongoId().withMessage("invalid feedback id"),
+  body("status")
+    .notEmpty()
+    .isIn(["new", "in_progress", "resolved"])
+    .withMessage("status must be new/in_progress/resolved"),
 ];

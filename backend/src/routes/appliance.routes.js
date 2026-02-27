@@ -2,7 +2,7 @@ import express from "express";
 const router = express.Router();
 
 import * as applianceController from "../controllers/appliance.controller.js";
-import validate from "../middlewares/validate.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
 import { createApplianceValidator, updateApplianceValidator } from "../validators/appliance.validator.js";
 
 router.post("/households/:householdId/appliances", createApplianceValidator, validate, applianceController.createAppliance);
