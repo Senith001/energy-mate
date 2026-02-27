@@ -4,6 +4,8 @@ import rf from "../utils/responseFormatter.js";
 import Household from "../models/Household.js";
 import Bill from "../models/bill.js";
 import Appliance from "../models/Appliance.js";
+import RecommendationTemplate from "../models/RecommendationTemplate.js";
+import RecommendationStatus from "../models/RecommendationStatus.js";
 
 import {
   getEnergyTipsFromGemini,
@@ -255,9 +257,11 @@ export async function adminDeleteTemplate(req, res) {
 export async function userListTemplates(req, res) {
   try {
     const { householdId } = req.params;
-    if (!req.user?.id) return rf.error(res, "Unauthorized", 401);
 
-    const household = await verifyHouseholdOwnership(householdId, req.user.id);
+    const userId = getUserId(req);
+    if (!userId) return rf.error(res, "Unauthorized", 401);
+
+    const household = await verifyHouseholdOwnership(householdId, userId);
     if (!household) return rf.error(res, "Household not found or access denied", 403);
 
     const { category, priority } = req.query;
@@ -283,15 +287,15 @@ export async function userListTemplates(req, res) {
     return rf.error(res, "Server error", 500, err.message);
   }
 }
-
 export async function userUpdateTemplateStatus(req, res) {
   try {
     const { householdId, templateId } = req.params;
     const { status } = req.body;
 
-    if (!req.user?.id) return rf.error(res, "Unauthorized", 401);
+    const userId = getUserId(req);
+    if (!userId) return rf.error(res, "Unauthorized", 401);
 
-    const household = await verifyHouseholdOwnership(householdId, req.user.id);
+    const household = await verifyHouseholdOwnership(householdId, userId);
     if (!household) return rf.error(res, "Household not found or access denied", 403);
 
     if (!["active", "applied", "dismissed"].includes(status)) {

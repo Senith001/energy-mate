@@ -3,7 +3,7 @@ import Appliance from "../models/Appliance.js";
 export const createAppliance = async (req, res) => {
   try {
     const { householdId } = req.params;
-    const appliance = new Appliance({ householdId, ...req.body });
+    const appliance = new Appliance({ userId: req.user._id, householdId, ...req.body });
     const saved = await appliance.save();
     res.status(201).json(saved);
   } catch (error) {
