@@ -4,6 +4,9 @@ import User from "../models/User.js";
 import Otp from "../models/Otp.js";
 import { sendEmail } from "../utils/email.js";
 
+import fs from "fs";
+import path from "path";
+
 const signToken = (user) => {
   return jwt.sign(
     { id: user._id, role: user.role },
@@ -202,7 +205,7 @@ export const forgotPassword = async (req, res, next) => {
     });
 
     return res.status(200).json({
-      message: "If the email exists, a password reset OTP has been sent.",
+      message: "Password reset OTP has been sent to the registered email.",
     });
   } catch (err) {
     return handleError(err, res, next);
@@ -545,6 +548,111 @@ export const getAllAdmins = async (req, res, next) => {
     return res.status(200).json({
       count: admins.length,
       admins,
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= GET MY PROFILE =================
+export const getMyProfile = async (req, res, next) => {
+  try {
+    const u = req.user;
+    return res.status(200).json({
+      user: {
+        id: u._id,
+        userId: u.userId,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        phone: u.phone,
+        address: u.address,
+        city: u.city,
+        avatar: u.avatar,
+        isVerified: u.isVerified,
+      },
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= UPDATE MY PROFILE (name/phone/address/city) =================
+export const updateMyProfile = async (req, res, next) => {
+  try {
+    const { name, phone, address, city } = req.body || {};
+    const user = req.user;
+
+    if (name !== undefined) user.name = String(name).trim();
+    if (phone !== undefined) user.phone = String(phone).trim();
+    if (address !== undefined) user.address = String(address).trim();
+    if (city !== undefined) user.city = String(city).trim();
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      user: {
+        id: user._id,
+        userId: user.userId,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        city: user.city,
+        avatar: user.avatar,
+      },
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= UPLOAD/CHANGE MY AVATAR =================
+export const uploadMyAvatar = async (req, res, next) => {
+  try {
+    const user = req.user;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "avatar file is required" });
+    }
+
+    // delete old avatar file if exists
+    if (user.avatar?.filename) {
+      const oldPath = path.join(process.cwd(),"uploads","user avatars",user.avatar.filename);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+
+    const filename = req.file.filename;
+    const url = `${req.protocol}://${req.get("host")}/uploads/user avatars/${filename}`;
+
+    user.avatar = { filename, url };
+    await user.save();
+
+    return res.status(200).json({
+      message: "Profile picture updated successfully",
+      avatar: user.avatar,
+    });
+  } catch (err) {
+    return handleError(err, res, next);
+  }
+};
+
+// ================= DELETE MY AVATAR =================
+export const deleteMyAvatar = async (req, res, next) => {
+  try {
+    const user = req.user;
+
+    if (user.avatar?.filename) {
+      const filePath = path.join(process.cwd(),"uploads","user avatars",user.avatar.filename);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
+    user.avatar = { filename: "", url: "" };
+    await user.save();
+
+    return res.status(200).json({
+      message: "Profile picture deleted successfully",
     });
   } catch (err) {
     return handleError(err, res, next);

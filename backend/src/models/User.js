@@ -10,6 +10,15 @@ const userSchema = new mongoose.Schema(
     role: { type: String, default: "user", enum: ["user", "admin", "superadmin"] },
     isVerified: { type: Boolean, default: false },
     twoFactorEnabled: { type: Boolean, default: false },
+
+    // ✅ Profile fields
+    phone: { type: String, default: "" },
+    address: { type: String, default: "" },
+    city: { type: String, default: "" },
+    avatar: {
+      filename: { type: String, default: "" },
+      url: { type: String, default: "" },
+    },
   },
   { timestamps: true }
 );

@@ -3,10 +3,10 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import morgan from "morgan";
+import path from "path";
 
 // Routes
 import userRoutes from "./routes/userRoutes.js";
-
 import householdRoutes from "./routes/household.routes.js";
 import roomRoutes from "./routes/room.routes.js";
 import applianceRoutes from "./routes/appliance.routes.js";
@@ -26,12 +26,9 @@ const app = express();
 app.use(express.json());
 app.use(morgan("dev"));
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "*",
-    credentials: true,
-  })
-);
+app.use(cors({origin: process.env.CLIENT_URL || "*", credentials: true,}));
+
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // ================= HEALTH CHECK =================
 app.get("/health", (req, res) => {
