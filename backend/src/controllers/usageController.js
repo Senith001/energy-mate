@@ -1,30 +1,34 @@
 import Usage from "../models/usage.js";
-import Household from "../models/Household.js";
 import { success, error } from "../utils/responseFormatter.js";
+import Household from "../models/Household.js";
 import { getMonthlyCostSummary } from "../services/usageService.js";
 import { getCurrentWeather } from "../services/openWeatherService.js";
-
-// Verify user owns the household 
-async function verifyHouseholdOwnership(householdId, userId) {
-  const household = await Household.findOne({ _id: householdId, userId });
-  return household;
-}
+import { verifyHouseholdOwnership } from "../services/usageService.js";
 
 // CREATE/ADD USAGE
 async function createUsage(req, res) {
   try {
-    const { householdId, date, entryType, unitsUsed, previousReading, currentReading } = req.body;
+    let { householdId, date, entryType, unitsUsed, previousReading, currentReading } = req.body;
 
-    // Verify user owns the household
-    const household = await verifyHouseholdOwnership(householdId, req.user._id);
-    if (!household) {
-      return error(res, "Household not found or access denied", 403);
+    // Check user role and ownership
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(householdId, req.user._id);
+      if (!household) return error(res, "Household not found or access denied", 403);
+    }
+
+    // Calculate unitsUsed if readings provided
+    if (!unitsUsed && previousReading !== undefined && currentReading !== undefined) {
+      unitsUsed = currentReading - previousReading;
+      
+      if (unitsUsed < 0) {
+        return error(res, "currentReading must be greater than previousReading", 400);
+      }
     }
 
     const usage = new Usage({
       householdId,
       date,
-      entryType,
+      entryType: entryType || "manual", 
       unitsUsed,
       previousReading,
       currentReading,
@@ -44,7 +48,7 @@ async function createUsage(req, res) {
 async function getUsages(req, res) {
   try {
     // Get all households owned by the user
-    const userHouseholds = await Household.find({ owner: req.user._id }).select("_id");
+    const userHouseholds = await Household.find({ userId: req.user._id }).select("_id");
     const householdIds = userHouseholds.map((h) => h._id);
 
     const filter = { householdId: { $in: householdIds } };
@@ -70,10 +74,9 @@ async function getUsageById(req, res) {
     const usage = await Usage.findById(req.params.id);
     if (!usage) return error(res, "Usage not found", 404);
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(usage.householdId, req.user._id);
-    if (!household) {
-      return error(res, "Access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(usage.householdId, req.user._id);
+      if (!household) return error(res, "Access denied", 403);
     }
 
     return success(res, usage, "Usage fetched");
@@ -85,32 +88,43 @@ async function getUsageById(req, res) {
 // UPDATE
 async function updateUsage(req, res) {
   try {
-    // First find the usage to verify ownership
     const existingUsage = await Usage.findById(req.params.id);
     if (!existingUsage) return error(res, "Usage not found", 404);
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(existingUsage.householdId, req.user._id);
-    if (!household) {
-      return error(res, "Access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(existingUsage.householdId, req.user._id);
+      if (!household) return error(res, "Access denied", 403);
     }
 
-    const allowedFields = ["date", "entryType", "unitsUsed", "previousReading", "currentReading"];
-    const updates = {};
-    for (const key of allowedFields) {
-      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    const { currentReading, previousReading, unitsUsed } = req.body;
+
+    // Update both readings if provided
+    if (previousReading !== undefined) {
+      existingUsage.previousReading = previousReading;
     }
 
-    if (Object.keys(updates).length === 0) {
-      return error(res, "No valid fields to update", 400);
+    if (currentReading !== undefined) {
+      existingUsage.currentReading = currentReading;
     }
 
-    const usage = await Usage.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-      runValidators: true,
-    });
+    // Recalculate unitsUsed from readings
+    if ((previousReading !== undefined || currentReading !== undefined) && 
+        existingUsage.previousReading !== undefined && 
+        existingUsage.currentReading !== undefined) {
+      const calculated = existingUsage.currentReading - existingUsage.previousReading;
+      
+      if (calculated < 0) {
+        return error(res, "currentReading must be greater than previousReading", 400);
+      }
+      
+      existingUsage.unitsUsed = calculated;
+    } else if (unitsUsed !== undefined) {
+      // ✅ Or update unitsUsed directly
+      existingUsage.unitsUsed = unitsUsed;
+    }
 
-    return success(res, usage, "Usage updated");
+    const updated = await existingUsage.save();
+    return success(res, updated, "Usage updated");
   } catch (err) {
     if (err.code === 11000) {
       return error(res, "Duplicate usage entry for the given household and date", 409);
@@ -125,10 +139,9 @@ async function deleteUsage(req, res) {
     const usage = await Usage.findById(req.params.id);
     if (!usage) return error(res, "Usage not found", 404);
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(usage.householdId, req.user._id);
-    if (!household) {
-      return error(res, "Access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(usage.householdId, req.user._id);
+      if (!household) return error(res, "Access denied", 403);
     }
 
     await Usage.findByIdAndDelete(req.params.id);
@@ -141,21 +154,16 @@ async function deleteUsage(req, res) {
 // MONTHLY USAGE SUMMARY 
 async function getMonthlySummary(req, res) {
   try {
-    const { householdId, month, year } = req.query;
+    const { householdId, month, year } = req.params;
+    const { month: queryMonth, year: queryYear } = req.query;
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(householdId, req.user._id);
-    if (!household) {
-      return error(res, "Household not found or access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(householdId, req.user._id);
+      if (!household) return error(res, "Household not found or access denied", 403);
     }
 
-    const summary = await getMonthlyCostSummary(householdId, Number(month), Number(year));
-
-    return success(
-      res,
-      { householdId, month: Number(month), year: Number(year), ...summary },
-      "Monthly summary fetched"
-    );
+    const summary = await getMonthlyCostSummary(householdId, Number(queryMonth), Number(queryYear));
+    return success(res, { householdId, month: Number(queryMonth), year: Number(queryYear), ...summary }, "Monthly summary fetched");
   } catch (err) {
     return error(res, "Server error", 500, err.message);
   }
@@ -164,16 +172,15 @@ async function getMonthlySummary(req, res) {
 // ESTIMATE COST
 async function estimateCost(req, res) {
   try {
-    const { householdId, month, year } = req.query;
+    const { householdId, month, year } = req.params;
+    const { month: queryMonth, year: queryYear } = req.query;
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(householdId, req.user._id);
-    if (!household) {
-      return error(res, "Household not found or access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(householdId, req.user._id);
+      if (!household) return error(res, "Household not found or access denied", 403);
     }
 
-    const costInfo = await getMonthlyCostSummary(householdId, Number(month), Number(year));
-
+    const costInfo = await getMonthlyCostSummary(householdId, Number(queryMonth), Number(queryYear));
     return success(res, costInfo, "Cost estimated");
   } catch (err) {
     return error(res, "Server error", 500, err.message);
@@ -183,21 +190,17 @@ async function estimateCost(req, res) {
 // WEATHER IMPACT (third-party API integration) 
 async function getWeatherImpact(req, res) {
   try {
-    const { householdId, month, year, city } = req.query;
+    const { householdId, month, year } = req.params;
+    const { city } = req.query;
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(householdId, req.user._id);
-    if (!household) {
-      return error(res, "Household not found or access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(householdId, req.user._id);
+      if (!household) return error(res, "Household not found or access denied", 403);
     }
 
-    // Get usage summary with cost for the month (using shared helper)
     const summary = await getMonthlyCostSummary(householdId, Number(month), Number(year));
-
-    // Fetch current weather from OpenWeatherMap (third-party API)
     const weather = await getCurrentWeather(city || "Colombo");
 
-    // Simple insight based on temperature
     let insight;
     if (weather.temperature > 30) {
       insight = "High temperatures detected. Expect increased electricity usage due to cooling appliances.";
@@ -207,11 +210,7 @@ async function getWeatherImpact(req, res) {
       insight = "Cool temperatures. Lower electricity usage expected from cooling appliances.";
     }
 
-    return success(
-      res,
-      { usage: summary, weather, insight },
-      "Weather impact analysis"
-    );
+    return success(res, { usage: summary, weather, insight }, "Weather impact analysis");
   } catch (err) {
     if (err.response && err.response.status === 404) {
       return error(res, "City not found. Please provide a valid city name.", 400);

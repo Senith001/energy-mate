@@ -5,7 +5,10 @@ import { protect, authorize } from "../middlewares/auth.middleware.js"; // add y
 
 const router = express.Router();
 
-router.get("/",             viewTariff);   // anyone can view
-router.put("/",  protect, authorize("admin"), updateTariffRules, editTariff);  // admin only
+//read
+router.get("/",             viewTariff);   
+
+//update - admin only
+router.put("/",  protect, authorize("admin"), updateTariffRules, editTariff);  
 
 export default router;

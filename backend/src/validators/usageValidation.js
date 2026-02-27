@@ -13,21 +13,22 @@ const createUsageRules = [
     .optional()
     .isIn(["manual", "meter"]).withMessage("entryType must be 'manual' or 'meter'"),
   body("unitsUsed")
-    .notEmpty().withMessage("unitsUsed is required")
+    .optional()
     .isFloat({ min: 0 }).withMessage("unitsUsed must be a non-negative number"),
   body("previousReading")
     .optional()
     .isFloat({ min: 0 }).withMessage("previousReading must be a non-negative number"),
   body("currentReading")
     .optional()
-    .isFloat({ min: 0 }).withMessage("currentReading must be a non-negative number")
-    .custom((value, { req }) => {
-      // If entryType is meter and both readings provided, currentReading must be >= previousReading
-      if (req.body.entryType === "meter" && req.body.previousReading !== undefined) {
-        if (value < req.body.previousReading) {
-          throw new Error("currentReading must be higher or similar to previousReading for meter entries");
-        }
-      }
+    .isFloat({ min: 0 }).withMessage("currentReading must be a non-negative number"),
+  
+  // Custom validation: require either unitsUsed OR both readings
+  body().custom((value) => {
+    const { unitsUsed, previousReading, currentReading } = value;
+    
+    if (!unitsUsed && (!previousReading || !currentReading)) {
+      throw new Error("Provide either unitsUsed OR both previousReading and currentReading");
+    }
       return true;
     }),
   validate,
@@ -69,10 +70,10 @@ const idParamRule = [
   validate,
 ];
 
-// Monthly summary / estimate query 
+// Monthly summary / estimate param
 const monthlyQueryRules = [
-  query("householdId")
-    .notEmpty().withMessage("householdId query param is required")
+  param("householdId")
+    .notEmpty().withMessage("householdId param is required")
     .isMongoId().withMessage("householdId must be a valid Mongo ID"),
   query("month")
     .notEmpty().withMessage("month query param is required")
@@ -83,9 +84,17 @@ const monthlyQueryRules = [
   validate,
 ];
 
-// Weather impact query
+// Weather impact param
 const weatherImpactRules = [
-  ...monthlyQueryRules.slice(0, -1), // reuse householdId + month + year rules
+  param("householdId")
+    .notEmpty().withMessage("householdId param is required")
+    .isMongoId().withMessage("householdId must be a valid Mongo ID"),
+  query("month")
+    .notEmpty().withMessage("month query param is required")
+    .isInt({ min: 1, max: 12 }).withMessage("month must be 1-12"),
+  query("year")
+    .notEmpty().withMessage("year query param is required")
+    .isInt({ min: 2000, max: 2100 }).withMessage("year must be between 2000 and 2100"),
   query("city")
     .optional()
     .isString().withMessage("city must be a string"),

@@ -11,7 +11,7 @@ async function viewTariff(req, res) {
   }
 }
 
-// PUT update tariff (admin only)
+// PUT update tariff - admin only
 async function editTariff(req, res) {
   try {
     const { tariffLow, tariffHigh, ssclRate } = req.body;
