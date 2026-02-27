@@ -6,7 +6,8 @@ import { createAdmin } from "../controllers/userController.js";
 
 import { getAllUsers, deleteUser, changeUserPassword, deleteAdmin, changeAdminPassword, getAllAdmins  } from "../controllers/userController.js";
 
-
+import { getMyProfile, updateMyProfile, uploadMyAvatar, deleteMyAvatar } from "../controllers/userController.js";
+import { uploadAvatar } from "../middlewares/upload.middleware.js";
 
 const router = express.Router();
 
@@ -32,5 +33,12 @@ router.get("/superadmin/admins", protect, authorize("superadmin"), getAllAdmins)
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 router.put("/me/change-password", protect, changeMyPassword);
+
+router.get("/me", protect, getMyProfile);
+router.put("/me", protect, updateMyProfile);
+
+// avatar upload uses multipart/form-data with field name: "avatar"
+router.put("/me/avatar", protect, uploadAvatar.single("avatar"), uploadMyAvatar);
+router.delete("/me/avatar", protect, deleteMyAvatar);
 
 export default router;
