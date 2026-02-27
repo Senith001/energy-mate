@@ -1,11 +1,9 @@
+import mongoose from "mongoose";
 import rf from "../utils/responseFormatter.js";
 
 import Household from "../models/Household.js";
 import Bill from "../models/bill.js";
 import Appliance from "../models/Appliance.js";
-
-import RecommendationTemplate from "../models/RecommendationTemplate.js";
-import RecommendationStatus from "../models/RecommendationStatus.js";
 
 import {
   getEnergyTipsFromGemini,
@@ -13,9 +11,25 @@ import {
   getPredictionFromGemini,
 } from "../services/geminiService.js";
 
-// ===== helpers =====
-async function verifyHouseholdOwnership(householdId, userId) {
-  return Household.findOne({ _id: householdId, owner: userId });
+/* ===================== HELPERS ===================== */
+function getUserId(req) {
+  // support both styles: _id (mongoose) OR id (string)
+  return req.user?._id || req.user?.id || null;
+}
+
+export async function verifyHouseholdOwnership(householdId, userId) {
+  if (!mongoose.Types.ObjectId.isValid(householdId)) return null;
+
+  const household = await Household.findById(householdId).lean();
+  if (!household) return null;
+
+  const ownerId = household.userId?.toString();
+  const requesterId = userId?.toString();
+
+  if (!ownerId || !requesterId) return null;
+  if (ownerId !== requesterId) return null;
+
+  return household;
 }
 
 async function buildAiInputs(householdId) {
@@ -24,8 +38,9 @@ async function buildAiInputs(householdId) {
       .sort({ year: 1, month: 1 })
       .select("month year totalUnits totalCost previousReading currentReading")
       .lean(),
+    
     Appliance.find({ householdId })
-      .select("name category wattage quantity defaultHoursPerDay efficiencyRating")
+      .select("name wattage quantity defaultHoursPerDay category efficiencyRating")
       .lean(),
   ]);
 
@@ -39,27 +54,32 @@ async function buildAiInputs(householdId) {
   }));
 
   const applianceUsage = appliances.map((a) => ({
-    name: a.name,
-    category: a.category,
-    wattage: a.wattage,
-    quantity: a.quantity,
-    usedHoursPerDay: a.defaultHoursPerDay,
-    efficiencyRating: a.efficiencyRating,
+    name: a?.name ?? "Unknown",
+    // these may be undefined if schema doesn't have them - that's OK
+    category: a?.category ?? null,
+    wattage: typeof a?.wattage === "number" ? a.wattage : null,
+    quantity: typeof a?.quantity === "number" ? a.quantity : 1,
+    usedHoursPerDay:
+      typeof a?.defaultHoursPerDay === "number" ? a.defaultHoursPerDay : 0,
+    efficiencyRating: a?.efficiencyRating ?? null,
   }));
 
   return { billHistory, applianceUsage };
 }
 
-// =========================
-// AI ENDPOINTS (no DB CRUD)
-// Base: /api/recommendations/households/:householdId/ai/...
-// =========================
+/* =====================
+   AI ENDPOINTS
+   Base: /api/recommendations/households/:householdId/ai/...
+===================== */
+
 export async function generateEnergyTips(req, res) {
   try {
     const { householdId } = req.params;
-    if (!req.user?.id) return rf.error(res, "Unauthorized", 401);
 
-    const household = await verifyHouseholdOwnership(householdId, req.user.id);
+    const userId = getUserId(req);
+    if (!userId) return rf.error(res, "Unauthorized", 401);
+
+    const household = await verifyHouseholdOwnership(householdId, userId);
     if (!household) return rf.error(res, "Household not found or access denied", 403);
 
     const { billHistory, applianceUsage } = await buildAiInputs(householdId);
@@ -68,34 +88,82 @@ export async function generateEnergyTips(req, res) {
     const tips = await getEnergyTipsFromGemini(billHistory, applianceUsage);
     return rf.success(res, { tips }, "Energy tips generated");
   } catch (err) {
-    return rf.error(res, "Failed to generate energy tips", 500, err.message);
+    const msg = String(err?.message || "");
+    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota")) {
+      return rf.error(res, "Gemini quota/rate limit exceeded. Try again in a few seconds.", 429, msg);
+    }
+    return rf.error(res, "Gemini AI failed to generate energy-saving tips", 502, msg);
   }
 }
 
 export async function generateCostStrategies(req, res) {
   try {
     const { householdId } = req.params;
-    if (!req.user?.id) return rf.error(res, "Unauthorized", 401);
 
-    const household = await verifyHouseholdOwnership(householdId, req.user.id);
+    const userId = getUserId(req);
+    if (!userId) return rf.error(res, "Unauthorized", 401);
+
+    const household = await verifyHouseholdOwnership(householdId, userId);
     if (!household) return rf.error(res, "Household not found or access denied", 403);
 
     const { billHistory, applianceUsage } = await buildAiInputs(householdId);
     if (!billHistory.length) return rf.error(res, "No bill history found", 404);
 
-    const strategies = await getCostStrategiesFromGemini(billHistory, applianceUsage);
-    return rf.success(res, { strategies }, "Cost strategies generated");
+    const strategy = await getCostStrategiesFromGemini(billHistory, applianceUsage);
+    return rf.success(res, { strategy }, "Cost strategy generated");
   } catch (err) {
-    return rf.error(res, "Failed to generate strategies", 500, err.message);
+    const msg = String(err?.message || "");
+    const raw = err?.raw || err?.failures || null; 
+
+    
+    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota")) {
+      return rf.error(res, "Gemini quota/rate limit exceeded. Try again later.", 429, msg);
+    }
+
+    
+    const looksLikeTruncate =
+      msg.toLowerCase().includes("unexpected end of json") ||
+      msg.toLowerCase().includes("unexpected end of input") ||
+      msg.toLowerCase().includes("non-json") ||
+      msg.toLowerCase().includes("invalid strategy") ||
+      msg.toLowerCase().includes("gemini failed to generate cost strategy");
+
+    if (looksLikeTruncate) {
+      
+      return rf.error(
+        res,
+        "AI cost strategy generation failed due to invalid provider output. Please try again.",
+        502,
+        raw ? String(raw) : msg
+      );
+    }
+
+    
+    if (msg.includes("Gemini failed")) {
+      return rf.error(
+        res,
+        "AI cost strategy generation temporarily unavailable due to provider limitations",
+        503,
+        JSON.stringify({
+          provider: "Gemini",
+          note: "Energy tips and predictions are available",
+          detail: msg,
+        })
+      );
+    }
+
+    // Default
+    return rf.error(res, "Failed to generate strategies", 502, msg);
   }
 }
-
 export async function generatePredictions(req, res) {
   try {
     const { householdId } = req.params;
-    if (!req.user?.id) return rf.error(res, "Unauthorized", 401);
 
-    const household = await verifyHouseholdOwnership(householdId, req.user.id);
+    const userId = getUserId(req);
+    if (!userId) return rf.error(res, "Unauthorized", 401);
+
+    const household = await verifyHouseholdOwnership(householdId, userId);
     if (!household) return rf.error(res, "Household not found or access denied", 403);
 
     const bills = await Bill.find({ householdId })
@@ -114,10 +182,13 @@ export async function generatePredictions(req, res) {
     const prediction = await getPredictionFromGemini(billHistory);
     return rf.success(res, { prediction }, "Prediction generated");
   } catch (err) {
-    return rf.error(res, "Failed to generate prediction", 500, err.message);
+    const msg = String(err?.message || "");
+    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota")) {
+      return rf.error(res, "Gemini quota/rate limit exceeded. Try again later.", 429, msg);
+    }
+    return rf.error(res, "Failed to generate prediction", 502, msg);
   }
 }
-
 // =========================
 // ADMIN CRUD: Template Library
 // Base: /api/recommendations/admin/templates

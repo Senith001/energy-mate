@@ -6,7 +6,7 @@ import { getCurrentWeather } from "../services/openWeatherService.js";
 
 // Verify user owns the household 
 async function verifyHouseholdOwnership(householdId, userId) {
-  const household = await Household.findOne({ _id: householdId, owner: userId });
+  const household = await Household.findOne({ _id: householdId, userId });
   return household;
 }
 
