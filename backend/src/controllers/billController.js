@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Bill from "../models/bill.js";
 import Household from "../models/Household.js";
 import { success, error } from "../utils/responseFormatter.js";
@@ -5,10 +6,19 @@ import { createUserBill, generateBill, compareBills } from "../services/billServ
 
 // Verify user owns the household 
 async function verifyHouseholdOwnership(householdId, userId) {
-  const household = await Household.findOne({ _id: householdId, owner: userId });
+  if (!mongoose.Types.ObjectId.isValid(householdId)) return null;
+
+  const household = await Household.findById(householdId).lean();
+  if (!household) return null;
+
+  const ownerId = household.userId?.toString(); 
+  const requesterId = userId?.toString();      
+
+  if (!ownerId || !requesterId) return null;
+  if (ownerId !== requesterId) return null;
+
   return household;
 }
-
 // CREATE BILL (user enters units or readings)
 async function createBill(req, res) {
   try {
