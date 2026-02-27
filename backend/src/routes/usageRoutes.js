@@ -20,13 +20,20 @@ import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
+//create
 router.post("/",               protect, createUsageRules,  createUsage);
-router.get("/",                protect,                    getUsages);
-router.get("/monthly-summary", protect, monthlyQueryRules, getMonthlySummary);
-router.get("/estimate",        protect, monthlyQueryRules, estimateCost);
-router.get("/weather-impact",  protect, weatherImpactRules, getWeatherImpact);
+
+//read
+router.get("/",                           protect,                    getUsages);
 router.get("/:id",             protect, idParamRule,       getUsageById);
-router.put("/:id",             protect, updateUsageRules,  updateUsage);
+router.get("/households/:householdId/monthly-summary", protect, monthlyQueryRules, getMonthlySummary);
+router.get("/households/:householdId/estimate",        protect, monthlyQueryRules, estimateCost);
+router.get("/households/:householdId/weather-impact",  protect, weatherImpactRules, getWeatherImpact);
+
+//update
+router.patch("/:id",             protect, updateUsageRules,  updateUsage);
+
+//delete
 router.delete("/:id",          protect, idParamRule,       deleteUsage);
 
 export default router;

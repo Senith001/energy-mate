@@ -1,23 +1,17 @@
 import Bill from "../models/bill.js";
-import Household from "../models/Household.js";
 import { success, error } from "../utils/responseFormatter.js";
 import { createUserBill, generateBill, compareBills } from "../services/billService.js";
-
-// Verify user owns the household 
-async function verifyHouseholdOwnership(householdId, userId) {
-  const household = await Household.findOne({ _id: householdId, owner: userId });
-  return household;
-}
+import { verifyHouseholdOwnership } from "../services/usageService.js";
 
 // CREATE BILL (user enters units or readings)
 async function createBill(req, res) {
   try {
     const { householdId, month, year, totalUnits, previousReading, currentReading } = req.body;
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(householdId, req.user._id);
-    if (!household) {
-      return error(res, "Household not found or access denied", 403);
+    // Verify ownership only for normal users
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(householdId, req.user._id);
+      if (!household) return error(res, "Household not found or access denied", 403);
     }
 
     const bill = await createUserBill({
@@ -37,12 +31,12 @@ async function createBill(req, res) {
 // GENERATE BILL (auto from usage records)
 async function generateBillFromUsage(req, res) {
   try {
-    const { householdId, month, year } = req.body;
+    const { householdId } = req.params;
+    const { month, year } = req.query;
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(householdId, req.user._id);
-    if (!household) {
-      return error(res, "Household not found or access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(householdId, req.user._id);
+      if (!household) return error(res, "Household not found or access denied", 403);
     }
 
     const bill = await generateBill(householdId, Number(month), Number(year));
@@ -55,7 +49,7 @@ async function generateBillFromUsage(req, res) {
 // GET ALL BILLS 
 async function getBills(req, res) {
   try {
-    const { householdId } = req.query;
+    const { householdId } = req.params;
 
     let filter = {};
 
@@ -93,11 +87,12 @@ async function getBillById(req, res) {
   try {
     const bill = await Bill.findById(req.params.id);
     if (!bill) return error(res, "Bill not found", 404);
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(bill.householdId, req.user._id);
-    if (!household) {
-      return error(res, "Access denied", 403);
+
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(bill.householdId, req.user._id);
+      if (!household) return error(res, "Access denied", 403);
     }
+
     return success(res, bill, "Bill fetched");
   } catch (err) {
     return error(res, "Server error", 500, err.message);
@@ -110,10 +105,9 @@ async function updateBill(req, res) {
     const bill = await Bill.findById(req.params.id);
     if (!bill) return error(res, "Bill not found", 404);
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(bill.householdId, req.user._id);
-    if (!household) {
-      return error(res, "Access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(bill.householdId, req.user._id);
+      if (!household) return error(res, "Access denied", 403);
     }
 
     const { totalUnits, previousReading, currentReading, month, year, status, paidAt } = req.body;
@@ -166,20 +160,15 @@ async function deleteBill(req, res) {
 // COMPARE CURRENT vs PREVIOUS MONTH 
 async function getComparison(req, res) {
   try {
-    const { householdId, month, year } = req.query;
+    const { householdId } = req.params;
+    const { month, year } = req.query;
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(householdId, req.user._id);
-    if (!household) {
-      return error(res, "Household not found or access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(householdId, req.user._id);
+      if (!household) return error(res, "Household not found or access denied", 403);
     }
 
-    const comparison = await compareBills(
-      householdId,
-      Number(month),
-      Number(year)
-    );
-
+    const comparison = await compareBills(householdId, Number(month), Number(year));
     return success(res, comparison, "Bill comparison");
   } catch (err) {
     return error(res, "Server error", 500, err.message);
@@ -192,18 +181,12 @@ async function regenerateBill(req, res) {
     const bill = await Bill.findById(req.params.id);
     if (!bill) return error(res, "Bill not found", 404);
 
-    // Verify ownership
-    const household = await verifyHouseholdOwnership(bill.householdId, req.user._id);
-    if (!household) {
-      return error(res, "Access denied", 403);
+    if (req.user && req.user.role === "user") {
+      const household = await verifyHouseholdOwnership(bill.householdId, req.user._id);
+      if (!household) return error(res, "Access denied", 403);
     }
 
-    const updated = await generateBill(
-      bill.householdId.toString(),
-      bill.month,
-      bill.year
-    );
-
+    const updated = await generateBill(bill.householdId.toString(), bill.month, bill.year);
     return success(res, updated, "Bill regenerated");
   } catch (err) {
     return error(res, "Server error", 500, err.message);

@@ -1,6 +1,7 @@
 import Usage from "../models/usage.js";
 import mongoose from "mongoose";
 import { getTariff } from "./tarifService.js";
+import Household from "../models/Household.js";
 
 // Two tiers:
 //   Tier A  – Consumption of 0–60 kWh per month
@@ -101,6 +102,16 @@ async function getMonthlyCostSummary(householdId, month, year) {
   ]);
   const costInfo = calculateCost(summary.totalUnits, tariff); // pass tariff in
   return { ...summary, ...costInfo };
+}
+
+/**
+ * Verify ownership of a household by userId.
+ * @param {string} householdId
+ * @param {string} userId
+ * @returns {Promise<object|null>} Household document if found, else null
+ */
+export async function verifyHouseholdOwnership(householdId, userId) {
+  return await Household.findOne({ _id: householdId, userId });
 }
 
 export {
