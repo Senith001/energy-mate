@@ -21,7 +21,7 @@ router.post("/admin/register", registerAdmin);
 
 router.post("/admin/create", protect, authorize("admin"), createAdmin);
 
-router.get("/admin/users", protect, authorize("admin"), getAllUsers);
+router.get("/admin/users", protect, authorize("admin", "superadmin"), getAllUsers);
 
 
 router.delete("/admin/users/:id", protect, authorize("admin"), deleteUser);
