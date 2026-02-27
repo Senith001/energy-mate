@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Bill from "../models/bill.js";
 import { success, error } from "../utils/responseFormatter.js";
 import { createUserBill, generateBill, compareBills } from "../services/billService.js";
